@@ -77,15 +77,15 @@ async def get_assignments_by_course(course_id: str):
     return [serialize_assignment(a) async for a in cursor]
 
 
-async def get_assignments_for_student(student_id: str):
-    student = await db.students.find_one({"_id": ObjectId(student_id)})
-    if not student or "enrolledCourses" not in student:
-        return []
+# async def get_assignments_for_student(student_id: str):
+#     student = await db.students.find_one({"_id": ObjectId(student_id)})
+#     if not student or "enrolledCourses" not in student:
+#         return []
 
-    enrolled = [ObjectId(cid) for cid in student["enrolledCourses"]]
+#     enrolled = [ObjectId(cid) for cid in student["enrolledCourses"]]
 
-    cursor = db.assignments.find({"courseId": {"$in": enrolled}})
-    return [serialize_assignment(a) async for a in cursor]
+#     cursor = db.assignments.find({"courseId": {"$in": enrolled}})
+#     return [serialize_assignment(a) async for a in cursor]
 
 
 async def update_assignment(id: str, teacher_id: str, updates: dict):
