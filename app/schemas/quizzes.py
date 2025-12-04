@@ -1,15 +1,14 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
 
 class QuizQuestion(BaseModel):
     """Represents a single MCQ question inside a quiz."""
 
     # The question text itself
-    question: str = Field(
-        ..., min_length=5,
-        json_schema_extra={"example": "What is AI?"}
-    )
+    question: str = Field(..., min_length=5, json_schema_extra={"example": "What is AI?"})
+
     # Multiple options for MCQ (2 to 4 options required)
     options: list[str] = Field(..., min_length=2, max_length=4, json_schema_extra={"example": ["Option A", "Option B"]})
 
@@ -44,17 +43,24 @@ class QuizCreate(BaseModel):
 
 class QuizUpdate(BaseModel):
     """Schema for updating an existing quiz. All fields are optional."""
-    quizNumber: Optional[int]
-    description: Optional[str]
-    dueDate: Optional[datetime]
-    questions: Optional[list[QuizQuestion]]
-    timeLimitMinutes: Optional[int]
-    totalMarks: Optional[int]
-    aiGenerated: Optional[bool]
+    quizNumber: Optional[int] = None
+    description: Optional[str] = None
+    dueDate: Optional[datetime] = None
+    questions: Optional[list[QuizQuestion]] = None
+    timeLimitMinutes: Optional[int] = None
+    totalMarks: Optional[int] = None
+    aiGenerated: Optional[bool] = None
 
     # Allows disabling quiz (soft delete style)
     status: Optional[str] = Field(None, json_schema_extra={"example": "inactive"})
 
+    @model_validator(mode="before")
+    def convert_empty_strings(cls, data):
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if v == "":
+                    data[k] = None
+        return data
 
 class QuizResponse(BaseModel):
     """Schema returned to client after create/get/update."""

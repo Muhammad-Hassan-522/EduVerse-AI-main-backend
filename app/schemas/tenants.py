@@ -1,54 +1,37 @@
 from typing import Optional
 from datetime import datetime
-from pydantic import EmailStr, BaseModel, Field, HttpUrl
+from pydantic import EmailStr, BaseModel, Field, HttpUrl, model_validator
+
 
 # -------------------------
 # Schema: Used when creating a tenant
 # -------------------------
 class TenantCreate(BaseModel):
-    # Name of the tenant (e.g., school name)
-    tenantName: str = Field(
-        ..., min_length=2, max_length=100,
-        json_schema_extra={"example": "EduVerse School"}
-    )
-
-    # Optional logo URL for the tenant
-    tenantLogoUrl: Optional[HttpUrl] = Field(
-        None,
-        json_schema_extra={"example": "https://example.com/logo.png"}
-    )
-
-    # Email of the admin user
-    adminEmail: EmailStr = Field(
-        ..., json_schema_extra={"example": "admin@example.com"}
-    )
-
-    # Subscription ID stored in MongoDB (must be a valid ObjectId)
-    subscriptionId: str = Field(
-        ..., json_schema_extra={"example": "64a7c9e12f3d2a001f2d4b2f"}
-    )
-
+    tenantName: str = Field(..., min_length=2, max_length=100, json_schema_extra={"example": "EduVerse School"})
+    tenantLogoUrl: Optional[HttpUrl] = Field(None, json_schema_extra={"example": "https://example.com/logo.png"})
+    adminEmail: EmailStr = Field(..., json_schema_extra={"example": "admin@example.com"})
+    subscriptionId: str = Field(..., json_schema_extra={"example": "6931699f9fbdab6e6528c050"})
 
 # -------------------------
 # Schema: Used when updating tenant information
 # -------------------------
 class TenantUpdate(BaseModel):
-    tenantName: Optional[str] = Field(
-        None, min_length=2, max_length=100,
-        json_schema_extra={"example": "New School Name"}
-    )
+    tenantName: Optional[str] = Field(None, min_length=2, max_length=100)
+    tenantLogoUrl: Optional[HttpUrl] = None
+    status: Optional[str] = None
+    subscriptionId: Optional[str] = None
 
-    tenantLogoUrl: Optional[HttpUrl] = Field(
-        None,
-        json_schema_extra={"example": "https://example.com/newlogo.png"}
-    )
-
-    # Changing status (active / inactive / suspended)
-    status: Optional[str] = Field(
-        None,
-        json_schema_extra={"example": "inactive"}
-    )
-
+    # It is completely optional as the validation is being handled in crud file, but it is a good practice to write validator, so I am keeping this.
+    # It runs BEFORE Pydantic validates the body
+    # It checks all fields in the request body
+    # If a field has an empty string " " → it converts it to None
+    @model_validator(mode="before")
+    def empty_strings_to_none(cls, data):
+        if isinstance(data, dict):
+            for key, val in data.items():
+                if val == "":
+                    data[key] = None  # do NOT overwrite
+        return data
 
 # -------------------------
 # Schema: Response object returned to the frontend
@@ -59,6 +42,6 @@ class TenantResponse(BaseModel):
     tenantLogoUrl: Optional[HttpUrl] = None
     adminEmail: EmailStr
     status: str
-    subscriptionId: str
+    subscriptionId: Optional[str]
     createdAt: datetime
     updatedAt: Optional[datetime] = None
