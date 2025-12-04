@@ -14,7 +14,7 @@ class StudentCreate(BaseModel):
 
 class StudentResponse(BaseModel):
     id: str
-    tenant_id: Optional[str] = None
+    tenantId: Optional[str] = None
     name: str
     email: EmailStr
     profileImageURL: Optional[str] = None
