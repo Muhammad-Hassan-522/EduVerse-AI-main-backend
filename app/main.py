@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import students, courses
-from app.db.database import connect_to_mongo, close_mongo_connection
+from app.routers import courses, students, assignments, assignment_submissions, superAdmin, tenants, quizzes, quiz_submissions, admins, teachers, subscription
 
 app = FastAPI(
     title="EduVerse AI Backend",
@@ -9,25 +8,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware for Angular frontend
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],  # Angular dev server
+    allow_origins=["*"],  # or ['http://localhost:4200'] for Angular dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Database connection events
-@app.on_event("startup")
-async def startup_db():
-    await connect_to_mongo()
 
-@app.on_event("shutdown")
-async def shutdown_db():
-    await close_mongo_connection()
-
-# Root endpoint
 @app.get("/")
 def root():
     return {
@@ -36,11 +26,26 @@ def root():
         "status": "operational"
     }
 
-# Health check
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
-
 # Include routers
+
+# Eman
 app.include_router(students.router)
+
+# Tayyaba
 app.include_router(courses.router)
+
+# Ayesha
+app.include_router(superAdmin.router)
+app.include_router(assignments.router)
+app.include_router(assignment_submissions.router)
+
+
+# Hassan
+app.include_router(tenants.router)
+app.include_router(quizzes.router)
+app.include_router(quiz_submissions.router)
+
+# Manahil
+app.include_router(admins.router)
+app.include_router(subscription.router)
+app.include_router(teachers.router)

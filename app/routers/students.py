@@ -16,7 +16,8 @@ from app.schemas.student import StudentCreate, StudentResponse
 from app.crud.student import create_student as crud_create_student
 from app.db.database import db
 
-router = APIRouter(prefix="/students", tags=["students"])
+router = APIRouter(prefix="/student", tags=["Students"])
+
 
 # Helper function to get tenant ID from database
 async def get_current_tenant_id() -> str:
