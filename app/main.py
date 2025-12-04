@@ -1,6 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import courses, students, assignments, assignment_submissions, superAdmin, tenants, quizzes, quiz_submissions, admins, teachers, subscription
+from app.routers import (
+    courses, 
+    students, 
+    assignments, 
+    assignment_submissions, 
+    superAdmin, 
+    tenants, 
+    quizzes, 
+    quiz_submissions, 
+    admins, 
+    teachers, 
+    subscription, 
+    student_performance, 
+    student_courses, 
+    student_assignments, 
+    student_quizzes
+)
 
 app = FastAPI(
     title="EduVerse AI Backend",
@@ -30,6 +46,10 @@ def root():
 
 # Eman
 app.include_router(students.router)
+app.include_router(student_performance.router)
+app.include_router(student_courses.router) 
+app.include_router(student_assignments.router)
+app.include_router(student_quizzes.router)
 
 # Tayyaba
 app.include_router(courses.router)
