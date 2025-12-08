@@ -1,4 +1,5 @@
 
+
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
@@ -39,8 +40,8 @@ class CourseBase(BaseModel):
 
 # Create Course Request
 class CourseCreate(CourseBase):
-    teacherId: str  #  Required - client must provide this
-    tenantId: Optional[str] = None  #  Optional - will be set by router from DB
+    teacherId: str  # Required - client must provide this
+    tenantId: str   #  Required - client must provide this manually
     enrolledStudents: int = 0
 
 # Update Course Request - ALL fields from CourseBase should be optional
@@ -53,14 +54,12 @@ class CourseUpdate(BaseModel):
     duration: Optional[str] = None
     thumbnailUrl: Optional[str] = None
     modules: Optional[List[ModuleSchema]] = None
-    
-    
 
 # Course Response
 class CourseResponse(CourseBase):
     id: str = Field(alias="_id")
     teacherId: str
-    tenantId: str
+    tenantId: str  # Returns as string in API response
     enrolledStudents: int = 0
     createdAt: datetime
     updatedAt: datetime
@@ -68,15 +67,13 @@ class CourseResponse(CourseBase):
     class Config:
         populate_by_name = True
         json_encoders = {ObjectId: str}
-        #  - allows using both 'id' and '_id' field names
         allow_population_by_field_name = True
-        # Alternative for newer Pydantic versions (if above doesn't work):
-        # from_attributes = True
 
 # Course Enrollment Request
 class CourseEnrollment(BaseModel):
     studentId: str
     courseId: str
+    tenantId: str  
 
 # Course with Progress (for students)
 class CourseWithProgress(CourseResponse):

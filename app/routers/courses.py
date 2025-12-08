@@ -1,5 +1,6 @@
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+
+from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from app.schemas.courses import (
     CourseCreate, 
@@ -8,69 +9,52 @@ from app.schemas.courses import (
     CourseEnrollment
 )
 from app.crud.courses import course_crud
-from app.db.database import db
 
 router = APIRouter(prefix="/courses", tags=["courses"])
 
 
-# Dependency: Get Tenant ID
-
-async def get_current_tenant_id() -> str:
-    """
-    Fetch the current tenant ID from the database.
-    
-    This ensures all operations are scoped to the correct organization.
-    TODO: i will Replace with JWT token extraction when authentication is implemented.
-    """
-    tenant = await db.tenants.find_one({})
-    
-    if not tenant:
-        raise HTTPException(
-            status_code=500, 
-            detail="No tenant found in database. Please create a tenant first."
-        )
-    
-    return str(tenant["_id"])
-
-
-# Course CRUD Endpoints
-
-
 @router.post("/", response_model=CourseResponse, status_code=201)
-async def create_course(
-    course: CourseCreate,
-    tenantId: str = Depends(get_current_tenant_id)
-):
+async def create_course(course: CourseCreate):
     """
     Create a new course.
     
-    The tenant ID is automatically injected from the database.
-    Teacher ID must be provided in the request body.
-    """
-    # Set tenant ID before creating the course
-    course.tenantId = tenantId
+      Now validates teacher and tenant exist in database
+      Automatically updates teacher's assignedCourses array
     
-    created_course = await course_crud.create_course(course)
-    return created_course
+    Both teacherId and tenantId must be provided in the request body.
+    
+    Returns:
+    - 400: Invalid IDs, teacher/tenant not found, or belongs to different tenant
+    - 201: Course created successfully
+    """
+    try:
+        created_course = await course_crud.create_course(course)
+        return created_course
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/", response_model=List[CourseResponse])
 async def get_courses(
-    tenantId: str = Depends(get_current_tenant_id),
+    tenantId: str = Query(..., description="Tenant ID (required)"),  
     teacher_id: Optional[str] = Query(None, description="Filter by teacher ID"),
-    status: Optional[str] = Query(None, description="Filter by status (Active, Inactive, Upcoming, Completed)"),
-    category: Optional[str] = Query(None, description="Filter by category"),
-    search: Optional[str] = Query(None, description="Search in title/description"),
+    status: Optional[str] = Query(None, description="Filter by status (case-insensitive)"),
+    category: Optional[str] = Query(None, description="Filter by category (case-insensitive)"),
+    search: Optional[str] = Query(None, description="Search in title/description/category/courseCode"),
     skip: int = Query(0, ge=0, description="Number of courses to skip (pagination)"),
     limit: int = Query(100, ge=1, le=100, description="Maximum courses to return")
 ):
     """
     Get all courses with optional filters.
     
-    Supports filtering by teacher, status, category, and text search.
-    Results are automatically scoped to the current tenant.
+    tenantId is required as a query parameter.
+    All text filters are case-insensitive.
+    
+    Returns:
+    - 400: Invalid tenant ID or teacher ID format
+    - 200: List of courses (can be empty)
     """
-    courses = await course_crud.get_all_courses(
+    result = await course_crud.get_all_courses(
         tenantId=tenantId,
         teacher_id=teacher_id,
         status=status,
@@ -79,43 +63,70 @@ async def get_courses(
         skip=skip,
         limit=limit
     )
-    return courses
+    
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["message"])
+    
+    return result["courses"]
 
 
 @router.get("/{course_id}", response_model=CourseResponse)
 async def get_course(
     course_id: str,
-    tenantId: str = Depends(get_current_tenant_id)
+    tenantId: str = Query(..., description="Tenant ID (required)") 
 ):
     """
     Get a single course by its ID.
     
-    Returns 404 if course doesn't exist or belongs to a different tenant.
+    tenantId is required as a query parameter.
+    
+    Returns:
+    - 400: Invalid course ID or tenant ID format
+    - 403: Course belongs to different tenant
+    - 404: Course not found
+    - 200: Course details
     """
-    course = await course_crud.get_course_by_id(course_id, tenantId)
+    result = await course_crud.get_course_by_id(course_id, tenantId)
     
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
+    if not result["success"]:
+        message = result["message"]
+        
+        if "Invalid" in message and "format" in message:
+            raise HTTPException(status_code=400, detail=message)
+        elif "different tenant" in message:
+            raise HTTPException(status_code=403, detail=message)
+        elif "not found" in message:
+            raise HTTPException(status_code=404, detail=message)
+        else:
+            raise HTTPException(status_code=400, detail=message)
     
-    return course
+    return result["course"]
 
 
 @router.put("/{course_id}", response_model=CourseResponse)
 async def update_course(
     course_id: str,
     course_update: CourseUpdate,
-    tenantId: str = Depends(get_current_tenant_id)
+    tenantId: str = Query(..., description="Tenant ID (required)") 
 ):
     """
     Update a course's information.
     
-    Only provided fields will be updated. Empty or placeholder values are ignored.
-    Returns 404 if course doesn't exist or belongs to a different tenant.
+    tenantId is required as a query parameter.
+    Only provided fields will be updated.
+    
+    Returns:
+    - 400: Invalid course ID or tenant ID format
+    - 404: Course not found or belongs to different tenant
+    - 200: Updated course
     """
     updated_course = await course_crud.update_course(course_id, tenantId, course_update)
     
     if not updated_course:
-        raise HTTPException(status_code=404, detail="Course not found")
+        raise HTTPException(
+            status_code=404, 
+            detail="Course not found or belongs to different tenant"
+        )
     
     return updated_course
 
@@ -123,41 +134,55 @@ async def update_course(
 @router.delete("/{course_id}", status_code=204)
 async def delete_course(
     course_id: str,
-    tenantId: str = Depends(get_current_tenant_id)
+    tenantId: str = Query(..., description="Tenant ID (required)")  
 ):
     """
     Delete a course permanently.
     
-    Returns 404 if course doesn't exist or belongs to a different tenant.
-    Returns 204 (No Content) on successful deletion.
-    """
-    deleted = await course_crud.delete_course(course_id, tenantId)
+     UPDATED: Now automatically:
+    - Removes course from teacher's assignedCourses array
+    - Removes course from all enrolled students' enrolledCourses arrays
     
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Course not found")
+    tenantId is required as a query parameter.
+    
+    Returns:
+    - 400: Invalid course ID or tenant ID format
+    - 404: Course not found or belongs to different tenant
+    - 204: Successfully deleted (No Content)
+    """
+    result = await course_crud.delete_course(course_id, tenantId)
+    
+    if not result["success"]:
+        message = result["message"]
+        
+        if "Invalid" in message and "format" in message:
+            raise HTTPException(status_code=400, detail=message)
+        elif "not found" in message or "different tenant" in message:
+            raise HTTPException(status_code=404, detail=message)
+        else:
+            raise HTTPException(status_code=400, detail=message)
     
     return None
 
 
-
 # Enrollment Endpoints
 
-
 @router.post("/enroll", status_code=200)
-async def enroll_in_course(
-    enrollment: CourseEnrollment,
-    tenantId: str = Depends(get_current_tenant_id)
-):
+async def enroll_in_course(enrollment: CourseEnrollment):
     """
     Enroll a student in a course.
     
+    Requires studentId, courseId, and tenantId in request body.
     Validates that both student and course exist and belong to the same tenant.
-    Prevents duplicate enrollments.
+    
+    Returns:
+    - 400: Invalid IDs, already enrolled, or validation error
+    - 200: Successfully enrolled
     """
     result = await course_crud.enroll_student(
         enrollment.courseId, 
         enrollment.studentId, 
-        tenantId
+        enrollment.tenantId
     )
     
     if not result["success"]:
@@ -167,19 +192,21 @@ async def enroll_in_course(
 
 
 @router.post("/unenroll", status_code=200)
-async def unenroll_from_course(
-    enrollment: CourseEnrollment,
-    tenantId: str = Depends(get_current_tenant_id)
-):
+async def unenroll_from_course(enrollment: CourseEnrollment):
     """
     Remove a student from a course.
     
-    Validates that the student is actually enrolled before removing them.
+    Requires studentId, courseId, and tenantId in request body.
+    Validates that the student is actually enrolled.
+    
+    Returns:
+    - 400: Invalid IDs, not enrolled, or validation error
+    - 200: Successfully unenrolled
     """
     result = await course_crud.unenroll_student(
         enrollment.courseId, 
         enrollment.studentId, 
-        tenantId
+        enrollment.tenantId
     )
     
     if not result["success"]:
@@ -191,12 +218,31 @@ async def unenroll_from_course(
 @router.get("/student/{student_id}", response_model=List[CourseResponse])
 async def get_student_courses(
     student_id: str,
-    tenantId: str = Depends(get_current_tenant_id)
+    tenantId: str = Query(..., description="Tenant ID (required)")  
 ):
     """
     Get all courses a student is enrolled in.
     
-    Returns an empty list if student has no enrollments.
+    tenantId is required as a query parameter.
+    
+    Returns:
+    - 400: Invalid student ID or tenant ID format
+    - 403: Student belongs to different tenant
+    - 404: Student not found
+    - 200: List of courses (can be empty if not enrolled)
     """
-    courses = await course_crud.get_student_courses(student_id, tenantId)
-    return courses
+    result = await course_crud.get_student_courses(student_id, tenantId)
+    
+    if not result["success"]:
+        message = result["message"]
+        
+        if "Invalid" in message and "format" in message:
+            raise HTTPException(status_code=400, detail=message)
+        elif "different tenant" in message:
+            raise HTTPException(status_code=403, detail=message)
+        elif "not found" in message:
+            raise HTTPException(status_code=404, detail=message)
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    
+    return result["courses"]

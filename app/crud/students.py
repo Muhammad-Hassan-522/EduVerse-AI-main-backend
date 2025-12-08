@@ -13,7 +13,7 @@ async def create_student(student: StudentCreate):
     data = student.dict()
 
     data.update({
-        "tenant_id": ObjectId(TENANT_ID),
+        "tenantId": ObjectId(TENANT_ID),
         "password": data["password"],
         "enrolledCourses": [],
         "completedCourses": [],
