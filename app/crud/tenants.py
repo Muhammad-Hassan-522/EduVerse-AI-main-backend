@@ -4,24 +4,31 @@ from datetime import datetime
 from bson import ObjectId
 from typing import Optional, Any
 
+
 def _ensure_objectid(_id: str, name: str = "id"):
     if not ObjectId.is_valid(_id):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid ObjectId for {name}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid ObjectId for {name}",
+        )
     return ObjectId(_id)
+
 
 # -------------------------
 # Convert MongoDB document → API format (Python dict)
 # -------------------------
 def serialize_tenant(tenant: dict) -> dict:
     return {
-        "id": str(tenant["_id"]),                     # convert ObjectId -> string
+        "id": str(tenant["_id"]),  # convert ObjectId -> string
         "tenantName": tenant["tenantName"],
         "tenantLogoUrl": tenant.get("tenantLogoUrl"),
         "adminEmail": tenant["adminEmail"],
         "status": tenant.get("status", "active"),
-        "subscriptionId": str(tenant.get("subscriptionId")) if tenant.get("subscriptionId") else None,
-        "createdAt": tenant["createdAt"],              # datetime object
-        "updatedAt": tenant.get("updatedAt")
+        "subscriptionId": (
+            str(tenant.get("subscriptionId")) if tenant.get("subscriptionId") else None
+        ),
+        "createdAt": tenant["createdAt"],  # datetime object
+        "updatedAt": tenant.get("updatedAt"),
     }
 
 
@@ -33,27 +40,37 @@ async def create_tenant(request):
     data = request.dict()
 
     # duplicate check: any tenant with same name that isn't soft-deleted
-    existing = await db.tenants.find_one({
-        "tenantName": data["tenantName"],
-        "isDeleted": {"$ne": True}
-    })
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant name already exists")
+    existing = await db.tenants.find_one(
+        {"tenantName": data["tenantName"], "isDeleted": {"$ne": True}}
+    )
 
-    # validate subscriptionId
-    _ensure_objectid(data["subscriptionId"], "subscriptionId")
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant name already exists"
+        )
+
+    if data.get("subscriptionId"):
+        _ensure_objectid(data["subscriptionId"], "subscriptionId")
+        data["subscriptionId"] = ObjectId(data["subscriptionId"])
+    else:
+        data.pop("subscriptionId", None)
+
+    # # validate subscriptionId
+    # _ensure_objectid(data["subscriptionId"], "subscriptionId")
 
     # Convert HttpUrl to string if present
     if "tenantLogoUrl" in data and data["tenantLogoUrl"]:
         data["tenantLogoUrl"] = str(data["tenantLogoUrl"])
 
-    data.update({
-        "subscriptionId": ObjectId(data["subscriptionId"]),  # convert to ObjectId
-        "createdAt": datetime.utcnow(),                      # timestamp
-        "status": "active",                                   # default status
-        "updatedAt": None,
-        "isDeleted": False
-    })
+    data.update(
+        {
+            # "subscriptionId": ObjectId(data["subscriptionId"]),  # convert to ObjectId
+            "createdAt": datetime.utcnow(),  # timestamp
+            "status": "active",  # default status
+            "updatedAt": None,
+            "isDeleted": False,
+        }
+    )
 
     # Insert into MongoDB
     result = await db.tenants.insert_one(data)
@@ -63,15 +80,16 @@ async def create_tenant(request):
 
     return serialize_tenant(new_tenant)
 
+
 # -------------------------
 # Get all tenants (filter, search, sort, pagination)
 # -------------------------
 async def get_all_tenants(
-        skip: int = 0,
-        limit: int = 10,
-        status: Optional[str] = None,
-        search: Optional[str] = None,
-        sort: Optional[str] = None
+    skip: int = 0,
+    limit: int = 10,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    sort: Optional[str] = None,
 ):
 
     query: dict[str, Any] = {"isDeleted": False}
@@ -142,8 +160,7 @@ async def update_tenant(_id: str, updates: dict):
     safe_updates["updatedAt"] = datetime.utcnow()
 
     await db.tenants.update_one(
-        {"_id": ObjectId(_id), "isDeleted": False},
-        {"$set": safe_updates}
+        {"_id": ObjectId(_id), "isDeleted": False}, {"$set": safe_updates}
     )
 
     tenant = await db.tenants.find_one({"_id": ObjectId(_id), "isDeleted": False})
@@ -157,6 +174,6 @@ async def delete_tenant(_id):
     # soft delete
     result = await db.tenants.update_one(
         {"_id": ObjectId(_id)},
-        {"$set": {"isDeleted": True, "updatedAt": datetime.utcnow()}}
+        {"$set": {"isDeleted": True, "updatedAt": datetime.utcnow()}},
     )
     return result.modified_count > 0

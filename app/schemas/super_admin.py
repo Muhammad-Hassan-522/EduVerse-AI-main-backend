@@ -1,22 +1,29 @@
-from pydantic import BaseModel, EmailStr
-from datetime import datetime
 from typing import Optional
+from pydantic import BaseModel
+from datetime import datetime
+from app.schemas.users import UserResponse
 
-class SuperAdminBase(BaseModel):
-    email: EmailStr
-    fullName: str
 
-class SuperAdminLogin(BaseModel):
-    email: EmailStr
-    password: str
+class SuperAdminCreate(BaseModel):
+    userId: str
 
-class SuperAdminResponse(SuperAdminBase):
+
+class SuperAdminUpdate(BaseModel):
+    # ---- user fields ----
+    fullName: Optional[str] = None
+    profileImageURL: Optional[str] = None
+    contactNo: Optional[str] = None
+    country: Optional[str] = None
+    status: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class SuperAdminResponse(BaseModel):
     id: str
-    profileImageURL: str | None = None
-    role: str = "super_admin"
+    userId: str
+    user: UserResponse  # NESTED USER
     createdAt: datetime
-    lastLogin: Optional[datetime]= None
+    updatedAt: datetime
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}

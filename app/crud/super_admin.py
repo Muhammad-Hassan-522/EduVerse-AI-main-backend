@@ -1,31 +1,47 @@
-from app.db.database import db
+from bson import ObjectId
 from datetime import datetime
+from app.db.database import db
+from app.crud.users import serialize_user
 
-def serialize_admin(a):
+
+def serialize_superadmin(user_doc):
     return {
-        "id": str(a["_id"]),
-        "email": a["email"],
-        "fullName": a["fullName"],
-        "profileImageURL": a.get("profileImageURL", None),
-        "role": a.get("role", "super_admin"),
-        "createdAt": a.get("createdAt"),
-        "lastLogin": a.get("lastLogin")
+        "id": str(user_doc["_id"]),
+        "userId": str(user_doc["_id"]),
+        "user": serialize_user(user_doc),  # attach user details
+        "createdAt": user_doc["createdAt"],
+        "updatedAt": user_doc["updatedAt"],
     }
 
-async def login_super_admin(email: str, password: str):
-    admin = await db.superAdmin.find_one({"email": email})
 
-    if not admin:
-        return "NOT_FOUND"
+async def get_superadmin_by_user(user_id: str):
+    user = await db.users.find_one({"_id": ObjectId(user_id), "role": "super-admin"})
+    if not user:
+        return None
+    return serialize_superadmin(user)
 
-    if password != admin["password"]:  
-        return "WRONG_PASSWORD"
 
-    new_login_time = datetime.utcnow()
-    await db.superAdmin.update_one(
-        {"_id": admin["_id"]},
-        {"$set": {"lastLogin": new_login_time}}
-    )
+ROLE_NAME = "super-admin"
 
-    admin["lastLogin"] = new_login_time
-    return serialize_admin(admin)
+
+async def update_superadmin(user_id: str, updates: dict):
+    ROLE_NAME = "super-admin"  # consistent
+
+    allowed_fields = ["fullName", "profileImageURL", "contactNo", "country", "status"]
+    user_fields = {k: v for k, v in updates.items() if k in allowed_fields}
+
+    if user_fields:
+        user_fields["updatedAt"] = datetime.utcnow()
+        result = await db.users.update_one(
+            {"_id": ObjectId(user_id), "role": ROLE_NAME}, {"$set": user_fields}
+        )
+        # Optional: check matched_count
+        if result.matched_count == 0:
+            return None
+
+    # Fetch the updated document
+    user = await db.users.find_one({"_id": ObjectId(user_id), "role": ROLE_NAME})
+    if not user:
+        return None
+
+    return serialize_superadmin(user)

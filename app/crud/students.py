@@ -1,258 +1,154 @@
-from datetime import datetime
 from bson import ObjectId
-from app.schemas.student import StudentCreate, StudentUpdate
-from app.utils.mongo import fix_object_ids
-from app.db.database import students_collection as COLLECTION
-from app.db.database import courses_collection
-from app.db.database import student_performance_collection
-# ---------------------------------------------------------------------------
-# Create Student (Multi-Tenant)
-# ---------------------------------------------------------------------------
-async def create_student(student: StudentCreate, tenant_id: str):
-    data = student.dict()
+from datetime import datetime
 
-    data.update({
-        "tenantId": ObjectId(tenant_id),
-        "password": data["password"],
+from fastapi import HTTPException
+from app.db.database import db
+from app.crud.users import serialize_user
+
+
+def serialize_student(s, user):
+    return {
+        "id": str(s["_id"]),
+        "userId": str(s["userId"]),
+        "user": serialize_user(user),  #  attach user
+        "enrolledCourses": s.get("enrolledCourses", []),
+        "completedCourses": s.get("completedCourses", []),
+        "status": s.get("status"),
+        "createdAt": s.get("createdAt"),
+        "updatedAt": s.get("updatedAt"),
+    }
+
+
+async def get_student_by_user(user_id: str):
+    student = await db.students.find_one({"userId": ObjectId(user_id)})
+    if not student:
+        return None
+
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        return None
+
+    return serialize_student(student, user)
+
+
+async def create_student(user_id: str):
+    data = {
+        "userId": ObjectId(user_id),
         "enrolledCourses": [],
         "completedCourses": [],
-        "role": "student",
         "status": "active",
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow(),
-        "lastLogin": None,
-    })
-
-    result = await COLLECTION.insert_one(data)
-    new_student = await COLLECTION.find_one({"_id": result.inserted_id})
-
-    # -----------------------------------------------------------
-    # AUTOMATICALLY CREATE STUDENT PERFORMANCE DOCUMENT
-    # -----------------------------------------------------------
-    performance_doc = {
-        "tenantId": ObjectId(tenant_id),
-        "studentId": result.inserted_id,
-        "studentName": data["fullName"],
-
-        "totalPoints": 0,
-        "pointsThisWeek": 0,
-        "xp": 0,
-        "level": 1,
-        "xpToNextLevel": 300,
-
-        "badges": [],
-        "certificates": [],
-        "weeklyStudyTime": [],
-        "courseStats": [],
-
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow()
     }
 
-    await student_performance_collection.insert_one(performance_doc)
+    result = await db.students.insert_one(data)
+    student = await db.students.find_one({"_id": result.inserted_id})
 
-    # -----------------------------------------------------------
-    return fix_object_ids(new_student)
-# ---------------------------------------------------------------------------
-# Create Student (Multi-Tenant)
-# ---------------------------------------------------------------------------
-async def create_student(student: StudentCreate, tenant_id: str):
-    data = student.dict()
+    # Fetch the user document
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
 
-    data.update({
-        "tenantId": ObjectId(tenant_id),
-        "password": data["password"],
-        "enrolledCourses": [],
-        "completedCourses": [],
-        "role": "student",
-        "status": "active",
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow(),
-        "lastLogin": None,
-    })
-
-    result = await COLLECTION.insert_one(data)
-    new_student = await COLLECTION.find_one({"_id": result.inserted_id})
-
-    # -----------------------------------------------------------
-    # AUTOMATICALLY CREATE STUDENT PERFORMANCE DOCUMENT
-    # -----------------------------------------------------------
-    performance_doc = {
-        "tenantId": ObjectId(tenant_id),
-        "studentId": result.inserted_id,
-        "studentName": data["fullName"],
-
-        "totalPoints": 0,
-        "pointsThisWeek": 0,
-        "xp": 0,
-        "level": 1,
-        "xpToNextLevel": 300,
-
-        "badges": [],
-        "certificates": [],
-        "weeklyStudyTime": [],
-        "courseStats": [],
-
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow()
-    }
-
-    await student_performance_collection.insert_one(performance_doc)
-
-    # -----------------------------------------------------------
-    return fix_object_ids(new_student)
+    return serialize_student(student, user)
 
 
+async def update_student_profile(user_id: str, updates: dict):
+    student_fields = {}
+    user_fields = {}
 
-# ---------------------------------------------------------------------------
-# Create Student (Multi-Tenant)
-# ---------------------------------------------------------------------------
-async def create_student(student: StudentCreate, tenant_id: str):
-    data = student.dict()
+    # ---- student fields ----
+    for field in ["status", "enrolledCourses", "completedCourses"]:
+        if field in updates:
+            student_fields[field] = updates[field]
 
-    data.update({
-        "tenantId": ObjectId(tenant_id),
-        "password": data["password"],
-        "enrolledCourses": [],
-        "completedCourses": [],
-        "role": "student",
-        "status": "active",
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow(),
-        "lastLogin": None,
-    })
+    # ---- user fields ----
+    for field in ["fullName", "profileImageURL", "contactNo", "country"]:
+        if field in updates:
+            user_fields[field] = updates[field]
 
-    result = await COLLECTION.insert_one(data)
-    new_student = await COLLECTION.find_one({"_id": result.inserted_id})
+    if student_fields:
+        student_fields["updatedAt"] = datetime.utcnow()
+        await db.students.update_one(
+            {"userId": ObjectId(user_id)}, {"$set": student_fields}
+        )
 
-    # -----------------------------------------------------------
-    # AUTOMATICALLY CREATE STUDENT PERFORMANCE DOCUMENT
-    # -----------------------------------------------------------
-    performance_doc = {
-        "tenantId": ObjectId(tenant_id),
-        "studentId": result.inserted_id,
-        "studentName": data["fullName"],
+    if user_fields:
+        user_fields["updatedAt"] = datetime.utcnow()
+        await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": user_fields})
 
-        "totalPoints": 0,
-        "pointsThisWeek": 0,
-        "xp": 0,
-        "level": 1,
-        "xpToNextLevel": 300,
+    # ---- fetch updated documents ----
+    student = await db.students.find_one({"userId": ObjectId(user_id)})
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
 
-        "badges": [],
-        "certificates": [],
-        "weeklyStudyTime": [],
-        "courseStats": [],
+    if not student or not user:
+        return None
 
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow()
-    }
-
-    await student_performance_collection.insert_one(performance_doc)
-
-    # -----------------------------------------------------------
-    return fix_object_ids(new_student)
-
-# ---------------------------------------------------------------------------
-# Login (Email only — tenant irrelevant)
-# ---------------------------------------------------------------------------
-async def get_student_by_email(email: str):
-    student = await COLLECTION.find_one({"email": email})
-    return fix_object_ids(student) if student else None
+    return serialize_student(student, user)
 
 
+async def assign_student_to_tenant(student_id: str, tenant_id: str):
+    if not ObjectId.is_valid(student_id):
+        raise HTTPException(status_code=400, detail="Invalid student ID")
+    if not ObjectId.is_valid(tenant_id):
+        raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-# ---------------------------------------------------------------------------
-# Get Student by ID + Tenant
-# ---------------------------------------------------------------------------
-async def get_student_by_id(student_id: str, tenantId: str):
-    student = await COLLECTION.find_one({
-        "_id": ObjectId(student_id),
-        "tenantId": ObjectId(tenantId)
-    })
-    return fix_object_ids(student) if student else None
+    # check tenant exists
+    tenant = await db.tenants.find_one({"_id": ObjectId(tenant_id), "isDeleted": False})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
 
-
-
-# ---------------------------------------------------------------------------
-# List All Students in a Tenant
-# ---------------------------------------------------------------------------
-async def list_students(tenantId: str):
-    cursor = COLLECTION.find({"tenantId": ObjectId(tenantId)})
-    return fix_object_ids(await cursor.to_list(length=None))
-
-
-
-# ---------------------------------------------------------------------------
-# Update Student
-# ---------------------------------------------------------------------------
-async def update_student(student_id: str, tenantId: str, update: StudentUpdate):
-
-    update_data = {k: v for k, v in update.dict().items() if v is not None}
-    update_data["updatedAt"] = datetime.utcnow()
-
-    result = await COLLECTION.update_one(
-        {"_id": ObjectId(student_id), "tenantId": ObjectId(tenantId)},
-        {"$set": update_data}
+    # update student
+    result = await db.students.update_one(
+        {"_id": ObjectId(student_id)},
+        {"$set": {"tenantId": ObjectId(tenant_id), "updatedAt": datetime.utcnow()}},
     )
 
     if result.modified_count == 0:
-        return None
+        raise HTTPException(status_code=404, detail="Student not found")
 
-    updated = await COLLECTION.find_one({
-        "_id": ObjectId(student_id),
-        "tenantId": ObjectId(tenantId)
-    })
-    return fix_object_ids(updated)
+    # fetch updated student
+    student = await db.students.find_one({"_id": ObjectId(student_id)})
+    user = await db.users.find_one({"_id": ObjectId(student["userId"])})
 
-# ---------------------------------------------------------------------------
-# Delete Student
-# ---------------------------------------------------------------------------
-#async def delete_student(student_id: str, tenantId: str):
+    from app.crud.students import serialize_student
 
-#    result = await COLLECTION.delete_one({
-#       "_id": ObjectId(student_id),
- #       "tenantId": ObjectId(tenantId)
-  #  })
+    return serialize_student(student, user)
 
-   # return result.deleted_count == 1
 
-async def delete_student(student_id: str, tenant_id: str):
+# in app/crud/students.py
+async def enroll_student_in_course(student_id: str, course_id: str):
+    from app.db.database import db
 
-    # STEP 1 — Fetch student before deleting
-    student = await COLLECTION.find_one({
-        "_id": ObjectId(student_id),
-        "tenantId": ObjectId(tenant_id)
-    })
+    # Validate IDs
+    if not ObjectId.is_valid(student_id) or not ObjectId.is_valid(course_id):
+        raise HTTPException(status_code=400, detail="Invalid ID")
 
+    # Get course
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    # Get student
+    student = await db.students.find_one({"_id": ObjectId(student_id)})
     if not student:
-        return False
+        raise HTTPException(status_code=404, detail="Student not found")
 
-    # STEP 2 — Decrease enrolledStudents count for each course
-    enrolled_courses = student.get("enrolledCourses", [])
-
-    for course_id in enrolled_courses:
-        await courses_collection.update_one(
-            {"_id": ObjectId(course_id)},
-            {"$inc": {"enrolledStudents": -1}}
+    # Update tenantId if not set
+    if "tenantId" not in student or not student.get("tenantId"):
+        await db.students.update_one(
+            {"_id": ObjectId(student_id)},
+            {"$set": {"tenantId": course["tenantId"], "updatedAt": datetime.utcnow()}},
         )
 
-    # STEP 3 — Delete the student from the STUDENTS collection
-    result = await COLLECTION.delete_one({
-        "_id": ObjectId(student_id),
-        "tenantId": ObjectId(tenant_id)
-    })
+    # Enroll student in course
+    enrolled = student.get("enrolledCourses", [])
+    if str(course["_id"]) not in enrolled:
+        enrolled.append(str(course["_id"]))
+        await db.students.update_one(
+            {"_id": ObjectId(student_id)},
+            {"$set": {"enrolledCourses": enrolled, "updatedAt": datetime.utcnow()}},
+        )
 
-    # If student was not deleted → stop
-    if result.deleted_count == 0:
-        return False
+    # Fetch updated student
+    student = await db.students.find_one({"_id": ObjectId(student_id)})
+    user = await db.users.find_one({"_id": ObjectId(student["userId"])})
 
-    # STEP 4 — Delete student performance document for this student + tenant
-    await student_performance_collection.delete_one({
-        "studentId": ObjectId(student_id),
-        "tenantId": ObjectId(tenant_id)
-    })
-
-    return True
-
-
+    return serialize_student(student, user)

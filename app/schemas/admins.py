@@ -1,44 +1,37 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from pydantic import BaseModel
+from typing import List, Optional
 from datetime import datetime
+from app.schemas.users import UserResponse
 
-# ------------------ Request Models ------------------
 
 class AdminCreate(BaseModel):
-    firstName: str
-    lastName: str
-    email: EmailStr
-    password: str = Field(..., min_length=6)
-    confirmPassword: str
-    country: str
-    phone: str
+    userId: str
+    permissions: List[str] = []
 
-class AdminLogin(BaseModel):
-    email: EmailStr
-    password: str
 
-class AdminUpdateProfile(BaseModel):
+class AdminUpdateRequest(BaseModel):
+
+    # ---- user fields ----
     fullName: Optional[str] = None
-    country: Optional[str] = None
-    contactNo: Optional[str] = None
     profileImageURL: Optional[str] = None
+    contactNo: Optional[str] = None
+    country: Optional[str] = None
 
-class AdminUpdatePassword(BaseModel):
-    oldPassword: str
-    newPassword: str = Field(..., min_length=6)
+    # ---- admin fields ----
+    permissions: Optional[List[str]] = None
+    status: Optional[str] = None
 
-# ------------------ Response Models ------------------
+    model_config = {"from_attributes": True}
+
 
 class AdminResponse(BaseModel):
     id: str
-    fullName: str
-    email: EmailStr
-    country: Optional[str] = None
-    contactNo: Optional[str] = None
-    profileImageURL: Optional[str] = ""
-    status: Optional[str] = "active"
-    createdAt: datetime = Field(default_factory=datetime.utcnow())
-    updatedAt: Optional[datetime] = Field(default_factory=datetime.utcnow())
+    userId: str
+    permissions: List[str]
+    status: str
+    createdAt: datetime
+    updatedAt: datetime
 
-    class Config:
-        from_attributes = True
+    user: UserResponse
+
+    model_config = {"from_attributes": True}

@@ -6,18 +6,42 @@ from pydantic import EmailStr, BaseModel, Field, HttpUrl, model_validator
 # -------------------------
 # Schema: Used when creating a tenant
 # -------------------------
+# class TenantCreate(BaseModel):
+#     tenantName: str = Field(
+#         ...,
+#         min_length=2,
+#         max_length=100,
+#         json_schema_extra={"example": "EduVerse School"},
+#     )
+#     tenantLogoUrl: Optional[HttpUrl] = Field(
+#         None, json_schema_extra={"example": "https://example.com/logo.png"}
+#     )
+#     adminEmail: EmailStr = Field(
+#         ..., json_schema_extra={"example": "admin@example.com"}
+#     )
+
+
 class TenantCreate(BaseModel):
-    tenantName: str = Field(..., min_length=2, max_length=100, json_schema_extra={"example": "EduVerse School"})
-    tenantLogoUrl: Optional[HttpUrl] = Field(None, json_schema_extra={"example": "https://example.com/logo.png"})
-    adminEmail: EmailStr = Field(..., json_schema_extra={"example": "admin@example.com"})
-    subscriptionId: str = Field(..., json_schema_extra={"example": "6931699f9fbdab6e6528c050"})
+    tenantName: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
+        json_schema_extra={"example": "EduVerse School"},
+    )
+    # tenantLogoUrl: Optional[HttpUrl] = None
+    tenantLogoUrl: Optional[str] = None
+    adminEmail: EmailStr = Field(
+        ..., json_schema_extra={"example": "admin@example.com"}
+    )
+    subscriptionId: Optional[str] = None
+
 
 # -------------------------
 # Schema: Used when updating tenant information
 # -------------------------
 class TenantUpdate(BaseModel):
     tenantName: Optional[str] = Field(None, min_length=2, max_length=100)
-    tenantLogoUrl: Optional[HttpUrl] = None
+    tenantLogoUrl: Optional[str] = None
     status: Optional[str] = None
     subscriptionId: Optional[str] = None
 
@@ -33,13 +57,14 @@ class TenantUpdate(BaseModel):
                     data[key] = None  # do NOT overwrite
         return data
 
+
 # -------------------------
 # Schema: Response object returned to the frontend
 # -------------------------
 class TenantResponse(BaseModel):
     id: str
     tenantName: str
-    tenantLogoUrl: Optional[HttpUrl] = None
+    tenantLogoUrl: Optional[str] = None
     adminEmail: EmailStr
     status: str
     subscriptionId: Optional[str]

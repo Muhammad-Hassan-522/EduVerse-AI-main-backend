@@ -1,16 +1,20 @@
 [project]
-name = "eduverse-backend"
+name = "eduverse-ai-main-backend"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "bcrypt==3.2.2",
     "email-validator>=2.3.0",
     "fastapi>=0.121.1",
+    "jwt>=1.4.0",
     "motor>=3.7.1",
-    "passlib[bcrypt]>=1.7.4",
+    "passlib[bcrypt]==1.7.4",
     "pydantic>=2.12.4",
+    "pyjwt>=2.10.1",
     "python-dotenv>=1.2.1",
     "python-jose[cryptography]>=3.5.0",
+    "python-multipart>=0.0.20",
     "uvicorn>=0.38.0",
 ]

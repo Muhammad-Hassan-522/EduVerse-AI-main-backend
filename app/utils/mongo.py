@@ -2,10 +2,7 @@
 from bson import ObjectId
 
 def fix_object_ids(data):
-    """
-    Recursively convert ALL ObjectId values to strings
-    so FastAPI/JSON can encode them safely.
-    """
+    
     if isinstance(data, ObjectId):
         return str(data)
 

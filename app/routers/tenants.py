@@ -19,13 +19,13 @@ def _validate_objectid(_id: str):
             detail="Invalid ObjectId"
         )
 
-# -------------------------
-# Create a new tenant
-# -------------------------
-@router.post("/", response_model=TenantResponse, summary="Create a new tenant")
-async def create_tenant_route(data: TenantCreate):
-    # let CRUD validate subscriptionId & duplicates
-    return await create_tenant(data)
+# # -------------------------
+# # Create a new tenant
+# # -------------------------
+# @router.post("/", response_model=TenantResponse, summary="Create a new tenant")
+# async def create_tenant_route(data: TenantCreate):
+#     # let CRUD validate subscriptionId & duplicates
+#     return await create_tenant(data)
 
 
 # -------------------------

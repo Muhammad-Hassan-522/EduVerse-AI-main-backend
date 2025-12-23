@@ -1,87 +1,126 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from bson import ObjectId
-from app.schemas.assignment_submissions import AssignmentSubmissionCreate, AssignmentSubmissionResponse
+from app.auth.dependencies import require_role
+from app.schemas.assignment_submissions import (
+    AssignmentSubmissionCreate,
+    AssignmentSubmissionResponse,
+)
 from app.crud.assignment_submissions import (
     create_submission,
     get_all_submissions,
     get_submissions_by_student,
     get_submissions_by_assignment,
     grade_submission,
-    delete_submission
+    delete_submission,
 )
 
 router = APIRouter(
     prefix="/assignment-submissions",
-    tags=["Assignment Submissions"]
+    tags=["Assignment Submissions"],
 )
+
 
 def validate_object_id(id: str):
     if not ObjectId.is_valid(id):
         raise HTTPException(status_code=400, detail="Invalid ObjectId format")
 
+
+# ===============================
+# STUDENT: CREATE SUBMISSION
+# ===============================
 @router.post("/", response_model=AssignmentSubmissionResponse)
-async def create_submission_route(data: AssignmentSubmissionCreate):
-    # Validate IDs coming from client
-    validate_object_id(data.studentId)
+async def create_submission_route(
+    data: AssignmentSubmissionCreate,
+    current_user=Depends(require_role("student")),
+):
     validate_object_id(data.assignmentId)
     validate_object_id(data.courseId)
-    validate_object_id(data.tenantId)
 
-    submission = await create_submission(data)
-
-    if not submission:
-        raise HTTPException(status_code=500, detail="Failed to create submission")
+    submission = await create_submission(
+        data=data,
+        student_id=current_user["user_id"],
+        tenant_id=current_user["tenant_id"],
+    )
 
     return submission
 
 
+# ===============================
+# ADMIN / TEACHER: ALL SUBMISSIONS
+# ===============================
 @router.get("/", response_model=List[AssignmentSubmissionResponse])
-async def get_all_submissions_route():
-    submissions = await get_all_submissions()
-    return submissions
+async def get_all_submissions_route(
+    current_user=Depends(require_role("admin", "teacher")),
+):
+    return await get_all_submissions(current_user["tenant_id"])
 
 
-@router.get("/student/{student_id}", response_model=List[AssignmentSubmissionResponse])
-async def get_by_student(student_id: str):
-    validate_object_id(student_id)
+# ===============================
+# STUDENT / TEACHER: BY STUDENT
+# ===============================
+@router.get("/me", response_model=List[AssignmentSubmissionResponse])
+async def get_my_submissions(
+    current_user=Depends(require_role("student")),
+):
+    return await get_submissions_by_student(
+        student_id=current_user["user_id"],
+        tenant_id=current_user["tenant_id"],
+    )
 
-    submissions = await get_submissions_by_student(student_id)
 
-    if submissions is None:
-        raise HTTPException(status_code=404, detail="No submissions found for this student")
-
-    return submissions
-
-
-@router.get("/assignment/{assignment_id}", response_model=List[AssignmentSubmissionResponse])
-async def get_by_assignment(assignment_id: str):
+# ===============================
+# TEACHER / ADMIN: BY ASSIGNMENT
+# ===============================
+@router.get(
+    "/assignment/{assignment_id}",
+    response_model=List[AssignmentSubmissionResponse],
+)
+async def get_by_assignment(
+    assignment_id: str,
+    current_user=Depends(require_role("teacher", "admin")),
+):
     validate_object_id(assignment_id)
 
-    submissions = await get_submissions_by_assignment(assignment_id)
-
-    if submissions is None:
-        raise HTTPException(status_code=404, detail="No submissions found for this assignment")
-
-    return submissions
+    return await get_submissions_by_assignment(
+        assignment_id=assignment_id,
+        tenant_id=current_user["tenant_id"],
+    )
 
 
+# ===============================
+# TEACHER / ADMIN: GRADE
+# ===============================
 @router.put("/{submission_id}", response_model=AssignmentSubmissionResponse)
-async def grade_submission_route(submission_id: str, marks: int = None, feedback: str = None):
+async def grade_submission_route(
+    submission_id: str,
+    update,
+    current_user=Depends(require_role("teacher", "admin")),
+):
     validate_object_id(submission_id)
 
-    graded = await grade_submission(submission_id, marks, feedback)
-    if not graded:
-        raise HTTPException(status_code=404, detail="Submission not found")
+    return await grade_submission(
+        submission_id=submission_id,
+        tenant_id=current_user["tenant_id"],
+        marks=update.obtainedMarks,
+        feedback=update.feedback,
+    )
 
-    return graded
 
-
+# ===============================
+# ADMIN ONLY: DELETE
+# ===============================
 @router.delete("/{submission_id}")
-async def delete_submission_route(submission_id: str):
+async def delete_submission_route(
+    submission_id: str,
+    current_user=Depends(require_role("admin")),
+):
     validate_object_id(submission_id)
 
-    success = await delete_submission(submission_id)
+    success = await delete_submission(
+        submission_id=submission_id,
+        tenant_id=current_user["tenant_id"],
+    )
     if not success:
         raise HTTPException(status_code=404, detail="Submission not found")
 
