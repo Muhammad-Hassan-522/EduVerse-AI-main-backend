@@ -15,10 +15,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     if not user:
         raise HTTPException(status_code=401, detail="User not found or inactive")
 
+    tenant_id = user.get("tenantId")
+
     return {
         "user_id": str(user["_id"]),
         "role": user["role"],
-        "tenant_id": str(user["tenantId"]),
+        "tenant_id": str(tenant_id) if tenant_id else None,
     }
 
 
